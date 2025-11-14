@@ -1,5 +1,5 @@
 import os
-from .whatsapp_api import send_message
+from .whatsapp_api import send_message, send_interactive_buttons, send_interactive_list
 from .utils import loads, dumps, generate_reference_number, validate_phone, validate_email, validate_pin_code, validate_date_of_birth
 
 # Financial Fraud Types (A1.1)
@@ -78,28 +78,111 @@ FINANCIAL_DOCUMENTS = [
 ]
 
 def get_financial_fraud_menu():
-    """Generate menu for financial fraud types"""
+    """Generate menu for financial fraud types - returns text for fallback"""
     menu = "Select the type of Financial Fraud:\n"
     for key, value in FINANCIAL_FRAUD_TYPES.items():
         menu += f"{key}. {value}\n"
     menu += "\nReply with the number (1-23):"
     return menu
 
+def send_financial_fraud_interactive(wa_id):
+    """Send financial fraud types as interactive list"""
+    from .whatsapp_api import send_interactive_list, send_message
+    
+    # Split into sections (max 10 rows per section)
+    rows = []
+    for key, value in FINANCIAL_FRAUD_TYPES.items():
+        rows.append({
+            "id": key,
+            "title": value[:24],
+            "description": ""
+        })
+    
+    # Split into sections of 10 rows each
+    sections = []
+    for i in range(0, len(rows), 10):
+        section_rows = rows[i:i+10]
+        sections.append({
+            "title": f"Types {i+1}-{min(i+10, len(rows))}",
+            "rows": section_rows
+        })
+    
+    print(f"[DEBUG] Sending financial fraud interactive list to {wa_id}")
+    result = send_interactive_list(
+        wa_id,
+        "Select the type of Financial Fraud:",
+        "Select Fraud Type",
+        sections
+    )
+    
+    # The send_interactive_list function already handles fallback internally
+    # But we can add an extra check here for safety
+    if result and isinstance(result, dict):
+        if result.get("dry_run"):
+            print(f"[DEBUG] Dry-run mode: interactive list would be sent")
+        elif result.get("error") and not result.get("messages"):
+            print(f"[DEBUG] Interactive list failed, fallback should have been sent")
+        elif result.get("messages"):
+            print(f"[DEBUG] Interactive list sent successfully")
+    
+    return result
+
 def get_social_media_menu():
-    """Generate menu for social media platforms"""
+    """Generate menu for social media platforms - returns text for fallback"""
     menu = "Select the platform:\n"
     for key, value in SOCIAL_MEDIA_PLATFORMS.items():
         menu += f"{key}. {value}\n"
     menu += "\nReply with the number (1-7):"
     return menu
 
+def send_social_media_interactive(wa_id):
+    """Send social media platforms as interactive list"""
+    from .whatsapp_api import send_interactive_list
+    
+    rows = []
+    for key, value in SOCIAL_MEDIA_PLATFORMS.items():
+        rows.append({
+            "id": key,
+            "title": value[:24],
+            "description": ""
+        })
+    
+    sections = [{
+        "title": "Platforms",
+        "rows": rows
+    }]
+    
+    send_interactive_list(
+        wa_id,
+        "Select the platform:",
+        "Select Platform",
+        sections
+    )
+
 def get_social_media_subtype_menu():
-    """Generate menu for social media fraud subtypes"""
+    """Generate menu for social media fraud subtypes - returns text for fallback"""
     menu = "Select the type of fraud:\n"
     for key, value in SOCIAL_MEDIA_SUB_TYPES.items():
         menu += f"{key}. {value}\n"
     menu += "\nReply with the number (1-4):"
     return menu
+
+def send_social_media_subtype_interactive(wa_id):
+    """Send social media subtypes as interactive buttons"""
+    from .whatsapp_api import send_interactive_buttons
+    
+    buttons = []
+    for key, value in SOCIAL_MEDIA_SUB_TYPES.items():
+        buttons.append({
+            "id": key,
+            "title": value[:20]
+        })
+    
+    send_interactive_buttons(
+        wa_id,
+        "Select the type of fraud:",
+        buttons
+    )
 
 def start_new_complaint_flow(db, wa_id, complaint_type="A"):
     """Start a new complaint flow"""
@@ -125,9 +208,13 @@ def start_new_complaint_flow(db, wa_id, complaint_type="A"):
         cs.meta = dumps({"complaint_id": complaint.id})
     db.commit()
     
-    # Ask for category
+    # Ask for category with interactive buttons
     if complaint_type == "A":
-        send_message(wa_id, "Is your complaint related to:\n1. Financial Fraud\n2. Social Media Fraud\n\nReply with 1 or 2:")
+        buttons = [
+            {"id": "1", "title": "Financial Fraud"},
+            {"id": "2", "title": "Social Media Fraud"}
+        ]
+        send_interactive_buttons(wa_id, "Is your complaint related to:", buttons)
     return complaint.id
 
 def handle_financial_fraud_type(db, wa_id, fraud_type_num):
@@ -147,6 +234,12 @@ def handle_financial_fraud_type(db, wa_id, fraud_type_num):
         send_message(wa_id, "Error: Complaint not found. Please send 'start' to begin again.")
         return
     
+    # Normalize the input (strip whitespace, handle both string and numeric)
+    fraud_type_num = str(fraud_type_num).strip()
+    
+    print(f"[DEBUG] Processing financial fraud type: '{fraud_type_num}'")
+    print(f"[DEBUG] Available types: {list(FINANCIAL_FRAUD_TYPES.keys())}")
+    
     if fraud_type_num in FINANCIAL_FRAUD_TYPES:
         complaint.main_category = "financial_fraud"
         complaint.fraud_type = FINANCIAL_FRAUD_TYPES[fraud_type_num]
@@ -157,9 +250,12 @@ def handle_financial_fraud_type(db, wa_id, fraud_type_num):
         cs.meta = dumps({"complaint_id": complaint_id, "field_index": 0})
         db.commit()
         
-        send_message(wa_id, f"Selected: {FINANCIAL_FRAUD_TYPES[fraud_type_num]}\n\nNow, please provide your personal details:\n\n{PERSONAL_INFO_FIELDS[0][1]}:")
+        print(f"[DEBUG] Successfully selected: {FINANCIAL_FRAUD_TYPES[fraud_type_num]}")
+        send_message(wa_id, f"✅ Selected: {FINANCIAL_FRAUD_TYPES[fraud_type_num]}\n\nNow, please provide your personal details:\n\n{PERSONAL_INFO_FIELDS[0][1]}:")
     else:
-        send_message(wa_id, "Invalid selection. Please reply with a number between 1-23:")
+        print(f"[DEBUG] Invalid fraud type selection: '{fraud_type_num}'")
+        # Resend the interactive list
+        send_financial_fraud_interactive(wa_id)
 
 def handle_social_media_platform(db, wa_id, platform_num):
     """Handle social media platform selection"""
@@ -190,11 +286,12 @@ def handle_social_media_platform(db, wa_id, platform_num):
             db.commit()
             send_message(wa_id, f"Selected: {SOCIAL_MEDIA_PLATFORMS[platform_num]}\n\nPlease provide your personal details:\n\n{PERSONAL_INFO_FIELDS[0][1]}:")
         else:
-            # Ask for subtype
+            # Ask for subtype with interactive buttons
             cs.state = "new_complaint:social_subtype"
             cs.meta = dumps({"complaint_id": complaint_id})
             db.commit()
-            send_message(wa_id, f"Selected: {SOCIAL_MEDIA_PLATFORMS[platform_num]}\n\n{get_social_media_subtype_menu()}")
+            send_message(wa_id, f"Selected: {SOCIAL_MEDIA_PLATFORMS[platform_num]}")
+            send_social_media_subtype_interactive(wa_id)
     else:
         send_message(wa_id, "Invalid selection. Please reply with a number between 1-7:")
 
@@ -293,6 +390,7 @@ def handle_personal_info_answer(db, wa_id, text):
 def handle_document_collection(db, wa_id):
     """Handle document collection phase"""
     from .models import Complaint, ConversationState
+    from .whatsapp_api import send_interactive_buttons
     
     cs = db.query(ConversationState).filter_by(wa_id=wa_id).first()
     if not cs:
@@ -308,26 +406,35 @@ def handle_document_collection(db, wa_id):
         return
     
     # Generate platform-specific instructions
+    instruction_text = ""
     if complaint.main_category == "financial_fraud":
-        send_message(wa_id, "Please provide the following documents:\n\n" + 
-                    "\n".join([f"• {doc}" for doc in FINANCIAL_DOCUMENTS]) + 
-                    "\n\nYou can send images/photos. Send 'done' when you have uploaded all available documents.")
+        instruction_text = "Please provide the following documents:\n\n" + \
+                    "\n".join([f"• {doc}" for doc in FINANCIAL_DOCUMENTS]) + \
+                    "\n\nYou can send images/photos."
     elif complaint.main_category == "social_media_fraud":
         platform = complaint.fraud_type
         if platform == "Facebook":
-            send_message(wa_id, "First, register your complaint at Meta India Grievance Channel:\nhttps://help.meta.com/requests/1371776380779082/\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots\n• Alleged URL\n• Original ID Screenshot with URL (if Fake/Impersonation)\n\nSend images/photos. Send 'done' when finished.")
+            instruction_text = "First, register your complaint at Meta India Grievance Channel:\nhttps://help.meta.com/requests/1371776380779082/\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots\n• Alleged URL\n• Original ID Screenshot with URL (if Fake/Impersonation)"
         elif platform == "Instagram":
-            send_message(wa_id, "First, register your complaint at Meta India Grievance Channel:\nhttps://help.meta.com/requests/1371776380779082/\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots\n• Alleged URL\n• Original ID Screenshot with URL (if Fake/Impersonation)\n\nSend images/photos. Send 'done' when finished.")
+            instruction_text = "First, register your complaint at Meta India Grievance Channel:\nhttps://help.meta.com/requests/1371776380779082/\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots\n• Alleged URL\n• Original ID Screenshot with URL (if Fake/Impersonation)"
         elif platform == "X (Twitter)":
-            send_message(wa_id, "First, register your complaint at X India Grievance Channel:\nhttps://help.x.com/en/forms/account-access\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots\n• Alleged URL\n\nSend images/photos. Send 'done' when finished.")
+            instruction_text = "First, register your complaint at X India Grievance Channel:\nhttps://help.x.com/en/forms/account-access\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots\n• Alleged URL"
         elif platform == "WhatsApp":
-            send_message(wa_id, "First, dial ##002# from your hacked number to remove call forwarding.\n\nThen register at WhatsApp India Grievance Channel:\nhttps://www.whatsapp.com/contact/forms/1534459096974129\n\nProvide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots with hacked Number\n\nSend images/photos. Send 'done' when finished.")
+            instruction_text = "First, dial ##002# from your hacked number to remove call forwarding.\n\nThen register at WhatsApp India Grievance Channel:\nhttps://www.whatsapp.com/contact/forms/1534459096974129\n\nProvide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots with hacked Number"
         elif platform == "Telegram":
-            send_message(wa_id, "First, register your complaint at Telegram India Grievance Channel:\nhttps://telegram.org/support\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots with hacked Number/ID\n\nSend images/photos. Send 'done' when finished.")
+            instruction_text = "First, register your complaint at Telegram India Grievance Channel:\nhttps://telegram.org/support\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots with hacked Number/ID"
         elif platform == "Gmail/YouTube":
-            send_message(wa_id, "First, register your complaint at Google:\nhttps://accounts.google.com/v3/signin/recoveryidentifier?flowName=GlifWebSignIn&dsh=S-1358042667%3A1761737339859572\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots\n\nSend images/photos. Send 'done' when finished.")
+            instruction_text = "First, register your complaint at Google:\nhttps://accounts.google.com/v3/signin/recoveryidentifier?flowName=GlifWebSignIn&dsh=S-1358042667%3A1761737339859572\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots"
         elif platform == "Fraud Call/SMS":
-            send_message(wa_id, "Visit Sanchar Saathi to report:\nhttps://www.sancharsaathi.gov.in/sfc/Home/sfc-complaint.jsp\n\nOur agent will call or message you shortly to register your complaint.\n\nSend 'done' to complete.")
+            instruction_text = "Visit Sanchar Saathi to report:\nhttps://www.sancharsaathi.gov.in/sfc/Home/sfc-complaint.jsp\n\nOur agent will call or message you shortly to register your complaint."
+    
+    # Send instructions with interactive buttons
+    buttons = [
+        {"id": "done", "title": "✅ Done"},
+        {"id": "send_more", "title": "📎 Send More"}
+    ]
+    message_text = instruction_text if instruction_text else "Please send your documents (images/photos)."
+    send_interactive_buttons(wa_id, message_text + "\n\nWhat would you like to do?", buttons)
     
     cs.state = "new_complaint:documents:collecting"
     db.commit()
@@ -357,6 +464,7 @@ def _normalize_document_path(value: str) -> str:
 def handle_document_upload(db, wa_id, document_url_or_path):
     """Handle document upload (image URL or file path)"""
     from .models import Complaint, ConversationState
+    from .whatsapp_api import send_interactive_buttons
     import json
     
     cs = db.query(ConversationState).filter_by(wa_id=wa_id).first()
@@ -379,7 +487,12 @@ def handle_document_upload(db, wa_id, document_url_or_path):
     complaint.documents = json.dumps(documents)
     db.commit()
     
-    send_message(wa_id, "Document received. Send more documents or type 'done' to finish:")
+    # Send confirmation with interactive buttons
+    buttons = [
+        {"id": "done", "title": "✅ Done"},
+        {"id": "send_more", "title": "📎 Send More"}
+    ]
+    send_interactive_buttons(wa_id, "✅ Document received successfully!\n\nWhat would you like to do next?", buttons)
 
 def finalize_complaint(db, wa_id):
     """Finalize and submit the complaint"""
@@ -445,18 +558,18 @@ def handle_answer(db, wa_id, text, is_image=False, image_url=None):
         handle_personal_info_answer(db, wa_id, text)
         return
     
-    # Handle category selection
+    # Handle category selection (already handled in message_router, but keep for fallback)
     if state == "new_complaint:choose_category":
         if text.strip() == "1":
             cs.state = "new_complaint:financial_type"
             cs.meta = dumps({"complaint_id": loads(cs.meta).get("complaint_id")})
             db.commit()
-            send_message(wa_id, get_financial_fraud_menu())
+            send_financial_fraud_interactive(wa_id)
         elif text.strip() == "2":
             cs.state = "new_complaint:social_platform"
             cs.meta = dumps({"complaint_id": loads(cs.meta).get("complaint_id")})
             db.commit()
-            send_message(wa_id, get_social_media_menu())
+            send_social_media_interactive(wa_id)
         else:
             send_message(wa_id, "Invalid selection. Please reply with 1 or 2:")
         return

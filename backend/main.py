@@ -107,9 +107,13 @@ async def incoming(request: Request, db=Depends(get_db)):
                         # handle quick reply or button reply
                         interactive = msg.get('interactive', {})
                         if 'button_reply' in interactive:
-                            text = interactive['button_reply'].get('title') or interactive['button_reply'].get('id')
+                            # Prefer ID over title for better matching
+                            button_reply = interactive['button_reply']
+                            text = button_reply.get('id') or button_reply.get('title')
                         elif 'list_reply' in interactive:
-                            text = interactive['list_reply'].get('title') or interactive['list_reply'].get('id')
+                            # Prefer ID over title for better matching
+                            list_reply = interactive['list_reply']
+                            text = list_reply.get('id') or list_reply.get('title')
                     
                     if not wa_id:
                         continue

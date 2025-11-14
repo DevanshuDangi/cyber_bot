@@ -7,3 +7,4 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")  # from Meta WhatsApp Cloud API
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID", "")  # from Meta
 GRAPH_VERSION = os.getenv("GRAPH_VERSION", "v21.0")
 DEBUG_PRINT_REPLY = os.getenv("DEBUG_PRINT_REPLY", "1")  # if 1, prints replies when no token
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AlzaSyA_CPSofwYwYgz6ishOMR6HsQGgwyLO2kA")  # Google Gemini API key

@@ -90,13 +90,55 @@ The Cyber Crime Helpline 1930 receives a large number of calls daily, leading to
 ## 📋 Prerequisites
 
 - Python 3.8 or higher
-- pip (Python package manager)
-- ngrok (for webhook testing)
+- Node.js 18 or higher
+- npm (comes with Node.js)
+- ngrok (for webhook testing - optional)
 - WhatsApp Business API credentials (from Meta)
 
-## 🚀 Setup Instructions
+## 🚀 Quick Setup (Automated)
 
-### 1. Clone and Install Dependencies
+### One-Command Setup
+
+For **Linux/macOS**:
+```bash
+./setup.sh
+```
+
+For **Windows**:
+```bash
+python setup.py
+```
+
+This will automatically:
+- ✅ Create Python virtual environment
+- ✅ Install all backend dependencies
+- ✅ Install all frontend dependencies
+- ✅ Create .env template file
+- ✅ Create necessary directories
+- ✅ Optionally start both servers
+
+### Start Servers
+
+After setup, start both backend and frontend:
+
+**Linux/macOS:**
+```bash
+./start.sh
+```
+
+**Windows:**
+```batch
+start.bat
+```
+
+This will start:
+- Backend API on http://localhost:8000
+- Frontend UI on http://localhost:5173
+- API Documentation on http://localhost:8000/docs
+
+## 🛠️ Manual Setup Instructions
+
+If you prefer manual setup:
 
 ```bash
 # Navigate to project directory
