@@ -54,12 +54,9 @@ The Cyber Crime Helpline 1930 receives a large number of calls daily, leading to
 - Document/Image Upload Support
 - Data Validation (Phone, Email, PIN Code, Date formats)
 
-### Admin Dashboard
-- View all complaints
-- Filter and search
-- Export to CSV
-- Download PDF reports
-- View detailed complaint information
+### Admin Consoles
+- **React/TypeScript app (`admin-ui/`)** for police/ops teams with live stats, attachment previews, exports
+- **Static HTML dashboard (`dashboard/index.html`)** for quick offline inspection
 
 ## 🛠️ Technology Stack
 
@@ -170,16 +167,23 @@ Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`)
 4. Set Verify Token: `cyberbot123` (or your VERIFY_TOKEN)
 5. Subscribe to `messages` events
 
-### 7. Access Admin Dashboard
+### 7. Access Admin / Police Dashboards
 
-Open `dashboard/index.html` in your browser, or serve it via:
+#### React (TypeScript) Admin Console
 ```bash
-# Simple HTTP server
-python -m http.server 8080
-# Then open http://localhost:8080/dashboard/index.html
+cd admin-ui
+npm install
+# optional: export VITE_API_BASE="http://localhost:8000"
+npm run dev
 ```
+Visit the Vite dev URL (defaults to `http://localhost:5173`) and refresh data. You can change the API base URL from the UI header. This console shows stats, full complaint lists, inline evidence galleries, and PDF links.
 
-Or access directly: `file:///path/to/dashboard/index.html`
+#### Static HTML Dashboard
+Open `dashboard/index.html` directly, or serve it via:
+```bash
+python -m http.server 8080
+# visit http://localhost:8080/dashboard/index.html
+```
 
 ## 📱 Usage
 
@@ -222,9 +226,12 @@ whatsapp-1930-chatbot-v2/
 │   ├── utils.py                # Utility functions
 │   └── requirements.txt        # Python dependencies
 ├── dashboard/
-│   └── index.html              # Admin dashboard
+│   └── index.html              # Legacy (static) admin dashboard
+├── admin-ui/                   # React/TS admin console (npm run dev/build)
 ├── reports/                    # Generated PDF reports
 ├── media/                      # Uploaded documents/images
+├── scripts/
+│   └── dump_db.py              # Utility to print DB contents
 ├── chatbot.db                  # SQLite database
 ├── .env                        # Environment variables (create this)
 └── README.md                   # This file
@@ -269,6 +276,12 @@ curl http://localhost:8000/_demo/reports
 - Complaint Details: reference_number, complaint_type, main_category, fraud_type, sub_type, status
 - Documents: documents (JSON array)
 - Timestamps: created_at, updated_at
+
+## 🧰 Utilities
+- `scripts/dump_db.py` – prints every complaint/state/user for quick debugging. Run with:
+  ```bash
+  PYTHONPATH=. python3 scripts/dump_db.py
+  ```
 
 ## 🚨 Troubleshooting
 

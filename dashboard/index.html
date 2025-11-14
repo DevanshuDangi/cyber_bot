@@ -157,6 +157,34 @@
         font-weight: 600;
         color: #666;
       }
+      .doc-gallery {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 10px;
+      }
+      .doc-item {
+        background: #fff;
+        border: 1px solid #e0e6f0;
+        border-radius: 8px;
+        padding: 8px;
+        width: 180px;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .doc-item img {
+        width: 100%;
+        height: 120px;
+        object-fit: cover;
+        border-radius: 6px;
+      }
+      .doc-item .filename {
+        font-size: 12px;
+        color: #555;
+        word-break: break-word;
+      }
     </style>
   </head>
   <body>
@@ -184,6 +212,64 @@
 
     <script>
       let complaintsData = [];
+      const IMAGE_REGEX = /\.(png|jpe?g|gif|bmp|webp)$/i;
+
+      function parseDocuments(docInput) {
+        if (!docInput) return [];
+        if (Array.isArray(docInput)) return docInput;
+        try {
+          return JSON.parse(docInput);
+        } catch (error) {
+          console.warn('Unable to parse documents field', error);
+          return [];
+        }
+      }
+
+      function buildDocumentUrl(doc, api) {
+        if (!doc) return '';
+        const value = String(doc);
+        if (/^https?:\/\//i.test(value)) {
+          return value;
+        }
+        let relative = value;
+        const mediaIndex = value.indexOf('media/');
+        if (mediaIndex >= 0) {
+          relative = value.slice(mediaIndex);
+        }
+        relative = relative.replace(/^\/+/, '');
+        try {
+          const base = new URL(api);
+          base.pathname = `/${relative}`;
+          return base.toString();
+        } catch (error) {
+          return `${api.replace(/\/+$/, '')}/${relative}`;
+        }
+      }
+
+      function buildDocGalleryHtml(docs, api) {
+        if (!docs || !docs.length) {
+          return '';
+        }
+        return `<div class="doc-gallery">` + docs.map((doc, idx) => {
+          const url = buildDocumentUrl(doc, api);
+          const label = String(doc || '').split('/').pop() || `Attachment ${idx + 1}`;
+          if (IMAGE_REGEX.test(String(doc || '').split('?')[0])) {
+            return `
+              <div class="doc-item">
+                <img src="${url}" alt="Evidence ${idx + 1}" loading="lazy" />
+                <span class="filename">${label}</span>
+                <a href="${url}" target="_blank" class="btn-link">Open</a>
+              </div>
+            `;
+          }
+          return `
+            <div class="doc-item">
+              <span class="filename">${label}</span>
+              <a href="${url}" target="_blank" class="btn-link">Download</a>
+            </div>
+          `;
+        }).join('') + `</div>`;
+      }
 
       async function load() {
         const api = document.getElementById('api').value;
@@ -271,7 +357,10 @@
               </tr>
             </thead>
             <tbody>
-              ${data.map(d => `
+              ${data.map(d => {
+                const docs = parseDocuments(d.documents);
+                const docHtml = buildDocGalleryHtml(docs, api);
+                return `
                 <tr>
                   <td>${d.id}</td>
                   <td><strong>${d.reference_number || 'N/A'}</strong></td>
@@ -320,16 +409,18 @@
                         <span>${new Date(d.updated_at).toLocaleString('en-IN')}</span>
                       </div>
                       ` : ''}
-                      ${d.documents ? `
+                      ${docs.length ? `
                       <div class="detail-row">
                         <span class="label">Documents:</span>
-                        <span>${JSON.parse(d.documents || '[]').length} document(s)</span>
+                        <span>${docs.length} document(s)</span>
                       </div>
+                      ${docHtml}
                       ` : ''}
                     </div>
                   </td>
                 </tr>
-              `).join('')}
+              `;
+              }).join('')}
             </tbody>
           </table>
         `;

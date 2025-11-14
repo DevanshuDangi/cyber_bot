@@ -1,6 +1,10 @@
-import requests, json
 import os
+import requests, json
 from .config import WHATSAPP_TOKEN, PHONE_NUMBER_ID, GRAPH_VERSION, DEBUG_PRINT_REPLY
+
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+MEDIA_DIR = os.path.join(BASE_DIR, "media")
+os.makedirs(MEDIA_DIR, exist_ok=True)
 
 def _should_send():
     return bool(WHATSAPP_TOKEN and PHONE_NUMBER_ID)
@@ -64,30 +68,24 @@ def send_image(to: str, image_url: str, caption: str = ""):
         return {"ok": False, "error": str(e)}
 
 def download_media(media_id: str, media_url: str = None):
-    """Download media (image/document) from WhatsApp Cloud API.
-    Returns the file path or URL where the media is stored.
-    For now, returns the media_url if provided, or media_id.
-    In production, you would download and store the file locally.
-    """
+    """Download media (image/document) and return a /media/... path the UI can load."""
+    filename = f"{media_id}.jpg"
+    file_path = os.path.join(MEDIA_DIR, filename)
+    relative_path = f"/media/{filename}"
+
     if not _should_send():
-        # In dry-run mode, return a placeholder
-        return f"media_{media_id}.jpg"
-    
-    # If media_url is provided, download it
+        # Dry-run mode cannot download, but keep path consistent
+        return relative_path
+
     if media_url:
         try:
             headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}"}
             response = requests.get(media_url, headers=headers, timeout=30)
-            if response.status_code == 200:
-                # Save to local storage
-                media_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "media")
-                os.makedirs(media_dir, exist_ok=True)
-                file_path = os.path.join(media_dir, f"{media_id}.jpg")
-                with open(file_path, "wb") as f:
-                    f.write(response.content)
-                return file_path
+            response.raise_for_status()
+            with open(file_path, "wb") as f:
+                f.write(response.content)
+            return relative_path
         except Exception as e:
             print(f"Error downloading media: {e}")
-    
-    # Fallback: return media_id or URL
-    return media_url or f"media_{media_id}"
+
+    return relative_path

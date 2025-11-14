@@ -1,13 +1,96 @@
 # backend/reports.py
-import os, json
+import os
+import json
 from io import BytesIO
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
 from datetime import datetime
+
+import requests  # type: ignore
+from reportlab.lib.pagesizes import A4  # type: ignore
+from reportlab.pdfgen import canvas  # type: ignore
+from reportlab.lib.utils import ImageReader  # type: ignore
+
 from .utils import loads
 
-REPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "reports")
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+REPORTS_DIR = os.path.join(BASE_DIR, "reports")
+MEDIA_DIR = os.path.join(BASE_DIR, "media")
 os.makedirs(REPORTS_DIR, exist_ok=True)
+os.makedirs(MEDIA_DIR, exist_ok=True)
+
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
+MEDIA_PREFIX = "/media/"
+
+
+def _resolve_document_path(doc: str):
+    if not doc:
+        return None
+    doc = str(doc).strip().replace("file://", "")
+    if not doc:
+        return None
+    if doc.startswith("http://") or doc.startswith("https://"):
+        return doc
+    normalized = doc.lstrip("/")
+    candidate_paths = []
+    if os.path.isabs(doc):
+        candidate_paths.append(doc)
+    candidate_paths.append(os.path.join(BASE_DIR, normalized))
+    candidate_paths.append(os.path.join(MEDIA_DIR, normalized.split("media/", 1)[-1]))
+    candidate_paths.append(os.path.join(BASE_DIR, "reports", normalized))
+    if doc.startswith(MEDIA_PREFIX):
+        candidate_paths.append(os.path.join(BASE_DIR, normalized))
+    if doc.startswith("media/"):
+        candidate_paths.append(os.path.join(BASE_DIR, normalized))
+    if doc.startswith("media_") and "." in doc:
+        candidate_paths.append(os.path.join(MEDIA_DIR, doc))
+    for path in candidate_paths:
+        if path and os.path.exists(path):
+            return path
+    return None
+
+
+def _is_image_file(doc: str) -> bool:
+    _, ext = os.path.splitext(str(doc).split("?")[0])
+    return ext.lower() in IMAGE_EXTENSIONS
+
+
+def _draw_image(canvas_obj, source_path_or_url, x, y, max_width):
+    """
+    Draws an image on the PDF and returns the new Y position.
+    """
+    if y < 160:
+        canvas_obj.showPage()
+        y = A4[1] - 60
+    try:
+        if isinstance(source_path_or_url, str) and source_path_or_url.startswith(("http://", "https://")):
+            response = requests.get(source_path_or_url, timeout=10)
+            response.raise_for_status()
+            img_reader = ImageReader(BytesIO(response.content))
+        else:
+            img_reader = ImageReader(source_path_or_url)
+    except Exception as exc:
+        canvas_obj.setFont("Helvetica-Oblique", 9)
+        canvas_obj.drawString(x, y, f"[Image unavailable: {exc}]")
+        return y - 14
+
+    img_width, img_height = img_reader.getSize()
+    scale = min(max_width / img_width, 300 / img_height, 1)
+    draw_width = img_width * scale
+    draw_height = img_height * scale
+
+    if y - draw_height < 60:
+        canvas_obj.showPage()
+        y = A4[1] - 60
+
+    canvas_obj.drawImage(
+        img_reader,
+        x,
+        y - draw_height,
+        width=draw_width,
+        height=draw_height,
+        preserveAspectRatio=True,
+        mask="auto",
+    )
+    return y - draw_height - 15
 
 def build_pdf_bytes(complaint):
     """
@@ -142,16 +225,27 @@ def build_pdf_bytes(complaint):
     if documents:
         y -= 10
         c.setFont("Helvetica-Bold", 12)
-        c.drawString(x, y, "Documents:")
+        c.drawString(x, y, "Documents & Evidence:")
         y -= 18
         c.setFont("Helvetica", 11)
         for i, doc in enumerate(documents, 1):
-            doc_str = str(doc)[:150]
-            c.drawString(x + 10, y, f"{i}. {doc_str}")
+            doc_str = str(doc)
+            display_str = doc_str[:150]
+            c.drawString(x + 10, y, f"{i}. {display_str}")
             y -= 14
+            if _is_image_file(doc_str):
+                resolved = _resolve_document_path(doc_str)
+                if resolved:
+                    y = _draw_image(c, resolved, x + 20, y, max_width=(w - 2 * (x + 20)))
+                else:
+                    c.setFont("Helvetica-Oblique", 9)
+                    c.drawString(x + 20, y, "[Image file missing]")
+                    y -= 14
+                    c.setFont("Helvetica", 11)
             if y < 80:
                 c.showPage()
                 y = h - 50
+                c.setFont("Helvetica", 11)
 
     # Footer
     y -= 20

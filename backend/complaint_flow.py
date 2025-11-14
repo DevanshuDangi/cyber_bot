@@ -1,3 +1,4 @@
+import os
 from .whatsapp_api import send_message
 from .utils import loads, dumps, generate_reference_number, validate_phone, validate_email, validate_pin_code, validate_date_of_birth
 
@@ -62,6 +63,9 @@ PERSONAL_INFO_FIELDS = [
 ]
 
 # Document types for Financial Fraud (A1.1.1)
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+MEDIA_PREFIX = "/media/"
+
 FINANCIAL_DOCUMENTS = [
     "Aadhar Card / PAN Card",
     "Debit Card/ Credit Card photo",
@@ -328,6 +332,28 @@ def handle_document_collection(db, wa_id):
     cs.state = "new_complaint:documents:collecting"
     db.commit()
 
+def _normalize_document_path(value: str) -> str:
+    if not value:
+        return value
+    value = value.strip()
+    if not value:
+        return value
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    if value.startswith(MEDIA_PREFIX):
+        return value
+    if value.startswith("media/"):
+        return "/" + value.lstrip("/")
+    if value.startswith("./media/"):
+        return "/" + value.lstrip("./")
+    abs_path = os.path.abspath(value)
+    media_root = os.path.join(BASE_DIR, "media")
+    if abs_path.startswith(media_root):
+        rel = os.path.relpath(abs_path, BASE_DIR).replace("\\", "/")
+        return "/" + rel
+    return value
+
+
 def handle_document_upload(db, wa_id, document_url_or_path):
     """Handle document upload (image URL or file path)"""
     from .models import Complaint, ConversationState
@@ -348,7 +374,8 @@ def handle_document_upload(db, wa_id, document_url_or_path):
     
     # Add document to list
     documents = json.loads(complaint.documents or "[]")
-    documents.append(document_url_or_path)
+    normalized = _normalize_document_path(document_url_or_path)
+    documents.append(normalized)
     complaint.documents = json.dumps(documents)
     db.commit()
     

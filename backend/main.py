@@ -1,6 +1,8 @@
 import os, json
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import PlainTextResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from .config import VERIFY_TOKEN
 from .db import SessionLocal, engine
 from .models import User, Complaint, ConversationState, Base
@@ -11,6 +13,19 @@ Base.metadata.create_all(bind=engine)
 ensure_schema(engine)
 
 app = FastAPI(title="1930 WhatsApp Chatbot (modular)")
+
+# Add CORS middleware to allow frontend to access the API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+MEDIA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "media")
+if os.path.isdir(MEDIA_DIR):
+    app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 def get_db():
     db = SessionLocal()
