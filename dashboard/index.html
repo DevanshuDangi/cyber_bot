@@ -3,31 +3,374 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>1930 Chatbot Dashboard (Demo)</title>
+    <title>1930 Cyber Crime Helpline - Admin Dashboard</title>
     <style>
-      body{font-family:Arial,Helvetica,sans-serif;background:#f4f6fb;color:#0b1220;padding:20px}
-      .card{background:white;padding:12px;border-radius:8px;box-shadow:0 6px 18px rgba(16,24,40,0.08);margin-bottom:12px}
-      table{width:100%;border-collapse:collapse}
-      th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+      * { box-sizing: border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+        background: #f4f6fb;
+        color: #0b1220;
+        padding: 20px;
+        margin: 0;
+      }
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 12px;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
+      .header h1 { margin: 0 0 10px 0; font-size: 28px; }
+      .header p { margin: 0; opacity: 0.9; }
+      .controls {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .controls input {
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        flex: 1;
+        min-width: 200px;
+      }
+      .controls button {
+        padding: 10px 20px;
+        background: #667eea;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .controls button:hover { background: #5568d3; }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+      .stat-card {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .stat-card h3 {
+        margin: 0 0 10px 0;
+        font-size: 14px;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .stat-card .value {
+        font-size: 32px;
+        font-weight: bold;
+        color: #667eea;
+      }
+      .card {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        overflow-x: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th {
+        background: #f8f9fa;
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        color: #495057;
+        border-bottom: 2px solid #dee2e6;
+        position: sticky;
+        top: 0;
+      }
+      td {
+        padding: 12px;
+        border-bottom: 1px solid #eee;
+      }
+      tr:hover { background: #f8f9fa; }
+      .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .badge-draft { background: #ffc107; color: #000; }
+      .badge-submitted { background: #17a2b8; color: #fff; }
+      .badge-in_progress { background: #007bff; color: #fff; }
+      .badge-resolved { background: #28a745; color: #fff; }
+      .btn-link {
+        color: #667eea;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .btn-link:hover { text-decoration: underline; }
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+      }
+      .error {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 15px;
+        border-radius: 6px;
+        margin: 20px 0;
+      }
+      .complaint-details {
+        display: none;
+        margin-top: 10px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        font-size: 13px;
+      }
+      .complaint-details.show { display: block; }
+      .complaint-details h4 {
+        margin: 0 0 10px 0;
+        color: #495057;
+      }
+      .complaint-details .detail-row {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .complaint-details .label {
+        font-weight: 600;
+        color: #666;
+      }
     </style>
   </head>
   <body>
-    <h1>1930 Chatbot Dashboard (Demo)</h1>
-    <div class="card">
-      <label>API base: <input id="api" value="http://localhost:8000" style="width:300px"/></label>
-      <button onclick="load()">Load</button>
+    <div class="header">
+      <h1>1930 Cyber Crime Helpline, Odisha</h1>
+      <p>Admin Dashboard - Complaint Management System</p>
     </div>
-    <div id="reports"></div>
+    
+    <div class="controls">
+      <input id="api" type="text" value="http://localhost:8000" placeholder="API Base URL" />
+      <button onclick="load()">🔄 Refresh Data</button>
+      <button onclick="exportData()">📥 Export CSV</button>
+    </div>
+    
+    <div class="stats" id="stats"></div>
+    
+    <div id="error" class="error" style="display:none;"></div>
+    
+    <div class="card">
+      <h2>Complaints List</h2>
+      <div id="reports">
+        <div class="loading">Click "Refresh Data" to load complaints...</div>
+      </div>
+    </div>
+
     <script>
-      async function load(){
+      let complaintsData = [];
+
+      async function load() {
         const api = document.getElementById('api').value;
-        const r = await fetch(api + '/_demo/reports');
-        const data = await r.json();
-        const node = document.getElementById('reports');
-        node.innerHTML = '<div class="card"><table><tr><th>ID</th><th>WA ID</th><th>Category</th><th>Status</th><th>PDF</th></tr>' +
-          data.map(d => `<tr><td>${d.id}</td><td>${d.user.wa_id}</td><td>${d.category}</td><td>${d.status}</td><td><a href="${api}/reports/${d.id}.pdf" target="_blank">PDF</a></td></tr>`).join('') +
-          '</table></div>';
+        const errorDiv = document.getElementById('error');
+        errorDiv.style.display = 'none';
+        
+        try {
+          const response = await fetch(api + '/_demo/reports');
+          if (!response.ok) throw new Error('Failed to fetch data');
+          
+          const data = await response.json();
+          complaintsData = data;
+          
+          updateStats(data);
+          renderTable(data);
+        } catch (error) {
+          errorDiv.textContent = 'Error loading data: ' + error.message;
+          errorDiv.style.display = 'block';
+        }
       }
+
+      function updateStats(data) {
+        const stats = {
+          total: data.length,
+          submitted: data.filter(d => d.status === 'submitted').length,
+          in_progress: data.filter(d => d.status === 'in_progress').length,
+          resolved: data.filter(d => d.status === 'resolved').length,
+        };
+        
+        document.getElementById('stats').innerHTML = `
+          <div class="stat-card">
+            <h3>Total Complaints</h3>
+            <div class="value">${stats.total}</div>
+          </div>
+          <div class="stat-card">
+            <h3>Submitted</h3>
+            <div class="value">${stats.submitted}</div>
+          </div>
+          <div class="stat-card">
+            <h3>In Progress</h3>
+            <div class="value">${stats.in_progress}</div>
+          </div>
+          <div class="stat-card">
+            <h3>Resolved</h3>
+            <div class="value">${stats.resolved}</div>
+          </div>
+        `;
+      }
+
+      function getStatusBadge(status) {
+        const badges = {
+          'draft': '<span class="badge badge-draft">DRAFT</span>',
+          'submitted': '<span class="badge badge-submitted">SUBMITTED</span>',
+          'in_progress': '<span class="badge badge-in_progress">IN PROGRESS</span>',
+          'resolved': '<span class="badge badge-resolved">RESOLVED</span>'
+        };
+        return badges[status] || status;
+      }
+
+      function toggleDetails(id) {
+        const details = document.getElementById(`details-${id}`);
+        details.classList.toggle('show');
+      }
+
+      function renderTable(data) {
+        const api = document.getElementById('api').value;
+        if (data.length === 0) {
+          document.getElementById('reports').innerHTML = '<div class="loading">No complaints found.</div>';
+          return;
+        }
+        
+        const html = `
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Ref. No.</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.map(d => `
+                <tr>
+                  <td>${d.id}</td>
+                  <td><strong>${d.reference_number || 'N/A'}</strong></td>
+                  <td>${d.complaint_type || 'N/A'}</td>
+                  <td>${(d.main_category || '').replace('_', ' ').toUpperCase() || 'N/A'}</td>
+                  <td>${d.name || 'N/A'}</td>
+                  <td>${d.phone_number || 'N/A'}</td>
+                  <td>${getStatusBadge(d.status)}</td>
+                  <td>${new Date(d.created_at).toLocaleDateString('en-IN')}</td>
+                  <td>
+                    <a href="#" onclick="toggleDetails(${d.id}); return false;" class="btn-link">Details</a> |
+                    <a href="${api}/reports/${d.id}.pdf" target="_blank" class="btn-link">PDF</a>
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="9">
+                    <div id="details-${d.id}" class="complaint-details">
+                      <h4>Complaint Details</h4>
+                      <div class="detail-row">
+                        <span class="label">WhatsApp ID:</span>
+                        <span>${d.user.wa_id}</span>
+                      </div>
+                      <div class="detail-row">
+                        <span class="label">Email:</span>
+                        <span>${d.email_id || 'N/A'}</span>
+                      </div>
+                      <div class="detail-row">
+                        <span class="label">District:</span>
+                        <span>${d.district || 'N/A'}</span>
+                      </div>
+                      <div class="detail-row">
+                        <span class="label">Fraud Type:</span>
+                        <span>${d.fraud_type || 'N/A'}</span>
+                      </div>
+                      <div class="detail-row">
+                        <span class="label">Sub Type:</span>
+                        <span>${d.sub_type || 'N/A'}</span>
+                      </div>
+                      <div class="detail-row">
+                        <span class="label">Created:</span>
+                        <span>${new Date(d.created_at).toLocaleString('en-IN')}</span>
+                      </div>
+                      ${d.updated_at ? `
+                      <div class="detail-row">
+                        <span class="label">Updated:</span>
+                        <span>${new Date(d.updated_at).toLocaleString('en-IN')}</span>
+                      </div>
+                      ` : ''}
+                      ${d.documents ? `
+                      <div class="detail-row">
+                        <span class="label">Documents:</span>
+                        <span>${JSON.parse(d.documents || '[]').length} document(s)</span>
+                      </div>
+                      ` : ''}
+                    </div>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+        document.getElementById('reports').innerHTML = html;
+      }
+
+      function exportData() {
+        if (complaintsData.length === 0) {
+          alert('No data to export. Please load data first.');
+          return;
+        }
+        
+        const headers = ['ID', 'Reference Number', 'Type', 'Category', 'Fraud Type', 'Name', 'Phone', 'Email', 'District', 'Status', 'Created'];
+        const rows = complaintsData.map(d => [
+          d.id,
+          d.reference_number || '',
+          d.complaint_type || '',
+          d.main_category || '',
+          d.fraud_type || '',
+          d.name || '',
+          d.phone_number || '',
+          d.email_id || '',
+          d.district || '',
+          d.status || '',
+          new Date(d.created_at).toLocaleString('en-IN')
+        ]);
+        
+        const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `complaints_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      }
+
+      // Auto-load on page load
+      window.addEventListener('load', () => {
+        load();
+      });
     </script>
   </body>
 </html>

@@ -1,91 +1,450 @@
 from .whatsapp_api import send_message
-from .utils import loads, dumps
+from .utils import loads, dumps, generate_reference_number, validate_phone, validate_email, validate_pin_code, validate_date_of_birth
 
-FLOWS = {
-    "financial": [
-        "Amount lost (₹)?",
-        "Date & time of transaction?",
-        "Bank/app used?",
-        "UPI ID / account details of recipient (if any)?"
-    ],
-    "account_compromise": [
-        "Which platform (WhatsApp/Instagram/etc.)?",
-        "Approx time when you lost access?",
-        "Have you enabled 2FA before? (yes/no)",
-        "Phone/email linked to the account?"
-    ],
-    "online_harassment": [
-        "Platform/user handle?",
-        "Describe the content or threat briefly.",
-        "Do you have screenshots? (yes/no)",
-        "Have you blocked the offender? (yes/no)"
-    ],
-    "other": [
-        "Briefly describe what happened.",
-        "Where did it occur (platform/app)?",
-        "Any monetary loss? If yes, how much (₹)?"
-    ]
+# Financial Fraud Types (A1.1)
+FINANCIAL_FRAUD_TYPES = {
+    "1": "Investment/Trading/IPO Fraud",
+    "2": "Customer Care Fraud",
+    "3": "UPI Fraud (UPI/IMPS/INB/NEFT/RTGS)",
+    "4": "APK Fraud",
+    "5": "Fake Franchisee/Dealership Fraud",
+    "6": "Online Job Fraud",
+    "7": "Debit Card Fraud",
+    "8": "Credit Card Fraud",
+    "9": "E-Commerce Fraud",
+    "10": "Loan App Fraud",
+    "11": "Sextortion Fraud",
+    "12": "OLX Fraud",
+    "13": "Lottery Fraud",
+    "14": "Hotel Booking Fraud",
+    "15": "Gaming App Fraud",
+    "16": "AEPS Fraud (Aadhar Enabled Payment System)",
+    "17": "Tower Installation Fraud",
+    "18": "E-Wallet Fraud",
+    "19": "Digital Arrest Fraud",
+    "20": "Fake Website Scam Fraud",
+    "21": "Ticket Booking Fraud",
+    "22": "Insurance Maturity Fraud",
+    "23": "Others"
 }
 
-def start_flow(db, wa_id, category="other"):
-    # create new complaint and return first question
+# Social Media Fraud Types (A2.1)
+SOCIAL_MEDIA_PLATFORMS = {
+    "1": "Facebook",
+    "2": "Instagram",
+    "3": "X (Twitter)",
+    "4": "WhatsApp",
+    "5": "Telegram",
+    "6": "Gmail/YouTube",
+    "7": "Fraud Call/SMS"
+}
+
+SOCIAL_MEDIA_SUB_TYPES = {
+    "1": "Impersonation Account",
+    "2": "Fake Account",
+    "3": "Hack",
+    "4": "Spread of Obscene content"
+}
+
+# Personal Information Fields (Common for A-1 & A-2)
+PERSONAL_INFO_FIELDS = [
+    ("name", "Name"),
+    ("father_spouse_guardian_name", "Father/Spouse/Guardian Name"),
+    ("date_of_birth", "Date of Birth (DD/MM/YYYY)"),
+    ("phone_number", "Phone Number"),
+    ("email_id", "Email ID"),
+    ("gender", "Gender (Male/Female/Other)"),
+    ("village", "Village"),
+    ("post_office", "Post Office"),
+    ("police_station", "Police Station"),
+    ("district", "District"),
+    ("pin_code", "PIN Code")
+]
+
+# Document types for Financial Fraud (A1.1.1)
+FINANCIAL_DOCUMENTS = [
+    "Aadhar Card / PAN Card",
+    "Debit Card/ Credit Card photo",
+    "Bank account front page",
+    "Bank Statement (highlighting fraudulent transactions with transaction reference number)",
+    "Screenshot of debit messages (showing transaction reference number with date and time)",
+    "UPI transactions Screenshot (showing UTR number with Date and time)",
+    "Credit Card statement or Screenshots of spent message reference number",
+    "Beneficiary account details (amount, transaction reference number, date and time)"
+]
+
+def get_financial_fraud_menu():
+    """Generate menu for financial fraud types"""
+    menu = "Select the type of Financial Fraud:\n"
+    for key, value in FINANCIAL_FRAUD_TYPES.items():
+        menu += f"{key}. {value}\n"
+    menu += "\nReply with the number (1-23):"
+    return menu
+
+def get_social_media_menu():
+    """Generate menu for social media platforms"""
+    menu = "Select the platform:\n"
+    for key, value in SOCIAL_MEDIA_PLATFORMS.items():
+        menu += f"{key}. {value}\n"
+    menu += "\nReply with the number (1-7):"
+    return menu
+
+def get_social_media_subtype_menu():
+    """Generate menu for social media fraud subtypes"""
+    menu = "Select the type of fraud:\n"
+    for key, value in SOCIAL_MEDIA_SUB_TYPES.items():
+        menu += f"{key}. {value}\n"
+    menu += "\nReply with the number (1-4):"
+    return menu
+
+def start_new_complaint_flow(db, wa_id, complaint_type="A"):
+    """Start a new complaint flow"""
     from .models import Complaint, ConversationState
-    c = Complaint(wa_id=wa_id, category=category, data=dumps({}))
-    db.add(c); db.commit(); db.refresh(c)
-    # set conv state
+    
+    # Create new complaint
+    complaint = Complaint(
+        wa_id=wa_id,
+        complaint_type=complaint_type,
+        status="draft"
+    )
+    db.add(complaint)
+    db.commit()
+    db.refresh(complaint)
+    
+    # Update conversation state
     cs = db.query(ConversationState).filter_by(wa_id=wa_id).first()
     if not cs:
-        cs = ConversationState(wa_id=wa_id, state=f"new_complaint:0", meta=dumps({}))
+        cs = ConversationState(wa_id=wa_id, state="new_complaint:choose_category", meta=dumps({"complaint_id": complaint.id}))
         db.add(cs)
     else:
-        cs.state = f"new_complaint:0"
-        cs.meta = dumps({})
+        cs.state = "new_complaint:choose_category"
+        cs.meta = dumps({"complaint_id": complaint.id})
     db.commit()
-    q = FLOWS.get(category, FLOWS['other'])[0]
-    send_message(wa_id, f"New complaint created (ID: {c.id}).\n{q}")
-    return c.id
+    
+    # Ask for category
+    if complaint_type == "A":
+        send_message(wa_id, "Is your complaint related to:\n1. Financial Fraud\n2. Social Media Fraud\n\nReply with 1 or 2:")
+    return complaint.id
 
-def handle_answer(db, wa_id, text):
+def handle_financial_fraud_type(db, wa_id, fraud_type_num):
+    """Handle financial fraud type selection"""
     from .models import Complaint, ConversationState
+    
     cs = db.query(ConversationState).filter_by(wa_id=wa_id).first()
-    if not cs or not cs.state.startswith("new_complaint") :
+    if not cs:
+        send_message(wa_id, "Session expired. Please send 'start' to begin again.")
+        return
+
+    meta = loads(cs.meta)
+    complaint_id = meta.get("complaint_id")
+    complaint = db.query(Complaint).filter_by(id=complaint_id).first()
+    
+    if not complaint:
+        send_message(wa_id, "Error: Complaint not found. Please send 'start' to begin again.")
+        return
+    
+    if fraud_type_num in FINANCIAL_FRAUD_TYPES:
+        complaint.main_category = "financial_fraud"
+        complaint.fraud_type = FINANCIAL_FRAUD_TYPES[fraud_type_num]
+        db.commit()
+        
+        # Move to personal info collection
+        cs.state = "new_complaint:personal_info:0"
+        cs.meta = dumps({"complaint_id": complaint_id, "field_index": 0})
+        db.commit()
+        
+        send_message(wa_id, f"Selected: {FINANCIAL_FRAUD_TYPES[fraud_type_num]}\n\nNow, please provide your personal details:\n\n{PERSONAL_INFO_FIELDS[0][1]}:")
+    else:
+        send_message(wa_id, "Invalid selection. Please reply with a number between 1-23:")
+
+def handle_social_media_platform(db, wa_id, platform_num):
+    """Handle social media platform selection"""
+    from .models import Complaint, ConversationState
+    
+    cs = db.query(ConversationState).filter_by(wa_id=wa_id).first()
+    if not cs:
+        send_message(wa_id, "Session expired. Please send 'start' to begin again.")
+        return
+    
+    meta = loads(cs.meta)
+    complaint_id = meta.get("complaint_id")
+    complaint = db.query(Complaint).filter_by(id=complaint_id).first()
+    
+    if not complaint:
+        send_message(wa_id, "Error: Complaint not found. Please send 'start' to begin again.")
+        return
+    
+    if platform_num in SOCIAL_MEDIA_PLATFORMS:
+        complaint.main_category = "social_media_fraud"
+        complaint.fraud_type = SOCIAL_MEDIA_PLATFORMS[platform_num]
+        db.commit()
+        
+        # For fraud call/SMS, skip subtype
+        if platform_num == "7":
+            cs.state = "new_complaint:personal_info:0"
+            cs.meta = dumps({"complaint_id": complaint_id, "field_index": 0})
+            db.commit()
+            send_message(wa_id, f"Selected: {SOCIAL_MEDIA_PLATFORMS[platform_num]}\n\nPlease provide your personal details:\n\n{PERSONAL_INFO_FIELDS[0][1]}:")
+        else:
+            # Ask for subtype
+            cs.state = "new_complaint:social_subtype"
+            cs.meta = dumps({"complaint_id": complaint_id})
+            db.commit()
+            send_message(wa_id, f"Selected: {SOCIAL_MEDIA_PLATFORMS[platform_num]}\n\n{get_social_media_subtype_menu()}")
+    else:
+        send_message(wa_id, "Invalid selection. Please reply with a number between 1-7:")
+
+def handle_social_media_subtype(db, wa_id, subtype_num):
+    """Handle social media fraud subtype selection"""
+    from .models import Complaint, ConversationState
+    
+    cs = db.query(ConversationState).filter_by(wa_id=wa_id).first()
+    if not cs:
+        send_message(wa_id, "Session expired. Please send 'start' to begin again.")
+        return
+    
+    meta = loads(cs.meta)
+    complaint_id = meta.get("complaint_id")
+    complaint = db.query(Complaint).filter_by(id=complaint_id).first()
+    
+    if not complaint:
+        send_message(wa_id, "Error: Complaint not found. Please send 'start' to begin again.")
+        return
+    
+    if subtype_num in SOCIAL_MEDIA_SUB_TYPES:
+        complaint.sub_type = SOCIAL_MEDIA_SUB_TYPES[subtype_num]
+        db.commit()
+        
+        # Move to personal info collection
+        cs.state = "new_complaint:personal_info:0"
+        cs.meta = dumps({"complaint_id": complaint_id, "field_index": 0})
+        db.commit()
+
+        send_message(wa_id, f"Selected: {SOCIAL_MEDIA_SUB_TYPES[subtype_num]}\n\nNow, please provide your personal details:\n\n{PERSONAL_INFO_FIELDS[0][1]}:")
+    else:
+        send_message(wa_id, "Invalid selection. Please reply with a number between 1-4:")
+
+def handle_personal_info_answer(db, wa_id, text):
+    """Handle personal information collection"""
+    from .models import Complaint, ConversationState
+    
+    cs = db.query(ConversationState).filter_by(wa_id=wa_id).first()
+    if not cs:
+        send_message(wa_id, "Session expired. Please send 'start' to begin again.")
+        return
+    
+    meta = loads(cs.meta)
+    complaint_id = meta.get("complaint_id")
+    field_index = meta.get("field_index", 0)
+    complaint = db.query(Complaint).filter_by(id=complaint_id).first()
+    
+    if not complaint:
+        send_message(wa_id, "Error: Complaint not found. Please send 'start' to begin again.")
+        return
+    
+    if field_index >= len(PERSONAL_INFO_FIELDS):
+        send_message(wa_id, "All personal information collected. Moving to document collection...")
+        handle_document_collection(db, wa_id)
+        return
+    
+    field_name, field_label = PERSONAL_INFO_FIELDS[field_index]
+    text = text.strip()
+    
+    # Validation
+    if field_name == "phone_number" and not validate_phone(text):
+        send_message(wa_id, "Invalid phone number. Please enter a valid 10-digit Indian phone number:")
+        return
+    
+    if field_name == "email_id" and not validate_email(text):
+        send_message(wa_id, "Invalid email address. Please enter a valid email:")
+        return
+    
+    if field_name == "pin_code" and not validate_pin_code(text):
+        send_message(wa_id, "Invalid PIN code. Please enter a valid 6-digit PIN code:")
+        return
+    
+    if field_name == "date_of_birth" and not validate_date_of_birth(text):
+        send_message(wa_id, "Invalid date format. Please enter date in DD/MM/YYYY format:")
+        return
+    
+    # Save the answer
+    setattr(complaint, field_name, text)
+    db.commit()
+    
+    # Move to next field
+    field_index += 1
+    if field_index < len(PERSONAL_INFO_FIELDS):
+        cs.state = f"new_complaint:personal_info:{field_index}"
+        cs.meta = dumps({"complaint_id": complaint_id, "field_index": field_index})
+        db.commit()
+        next_field_label = PERSONAL_INFO_FIELDS[field_index][1]
+        send_message(wa_id, f"{next_field_label}:")
+    else:
+        # All personal info collected, move to documents
+        cs.state = "new_complaint:documents"
+        cs.meta = dumps({"complaint_id": complaint_id})
+        db.commit()
+        handle_document_collection(db, wa_id)
+
+def handle_document_collection(db, wa_id):
+    """Handle document collection phase"""
+    from .models import Complaint, ConversationState
+    
+    cs = db.query(ConversationState).filter_by(wa_id=wa_id).first()
+    if not cs:
+        send_message(wa_id, "Session expired. Please send 'start' to begin again.")
+        return
+    
+    meta = loads(cs.meta)
+    complaint_id = meta.get("complaint_id")
+    complaint = db.query(Complaint).filter_by(id=complaint_id).first()
+    
+    if not complaint:
+        send_message(wa_id, "Error: Complaint not found. Please send 'start' to begin again.")
+        return
+    
+    # Generate platform-specific instructions
+    if complaint.main_category == "financial_fraud":
+        send_message(wa_id, "Please provide the following documents:\n\n" + 
+                    "\n".join([f"• {doc}" for doc in FINANCIAL_DOCUMENTS]) + 
+                    "\n\nYou can send images/photos. Send 'done' when you have uploaded all available documents.")
+    elif complaint.main_category == "social_media_fraud":
+        platform = complaint.fraud_type
+        if platform == "Facebook":
+            send_message(wa_id, "First, register your complaint at Meta India Grievance Channel:\nhttps://help.meta.com/requests/1371776380779082/\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots\n• Alleged URL\n• Original ID Screenshot with URL (if Fake/Impersonation)\n\nSend images/photos. Send 'done' when finished.")
+        elif platform == "Instagram":
+            send_message(wa_id, "First, register your complaint at Meta India Grievance Channel:\nhttps://help.meta.com/requests/1371776380779082/\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots\n• Alleged URL\n• Original ID Screenshot with URL (if Fake/Impersonation)\n\nSend images/photos. Send 'done' when finished.")
+        elif platform == "X (Twitter)":
+            send_message(wa_id, "First, register your complaint at X India Grievance Channel:\nhttps://help.x.com/en/forms/account-access\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots\n• Alleged URL\n\nSend images/photos. Send 'done' when finished.")
+        elif platform == "WhatsApp":
+            send_message(wa_id, "First, dial ##002# from your hacked number to remove call forwarding.\n\nThen register at WhatsApp India Grievance Channel:\nhttps://www.whatsapp.com/contact/forms/1534459096974129\n\nProvide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots with hacked Number\n\nSend images/photos. Send 'done' when finished.")
+        elif platform == "Telegram":
+            send_message(wa_id, "First, register your complaint at Telegram India Grievance Channel:\nhttps://telegram.org/support\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots with hacked Number/ID\n\nSend images/photos. Send 'done' when finished.")
+        elif platform == "Gmail/YouTube":
+            send_message(wa_id, "First, register your complaint at Google:\nhttps://accounts.google.com/v3/signin/recoveryidentifier?flowName=GlifWebSignIn&dsh=S-1358042667%3A1761737339859572\n\nThen provide:\n• Request Letter\n• Aadhar Card/Any Govt. Issue ID\n• Disputed Screenshots\n\nSend images/photos. Send 'done' when finished.")
+        elif platform == "Fraud Call/SMS":
+            send_message(wa_id, "Visit Sanchar Saathi to report:\nhttps://www.sancharsaathi.gov.in/sfc/Home/sfc-complaint.jsp\n\nOur agent will call or message you shortly to register your complaint.\n\nSend 'done' to complete.")
+    
+    cs.state = "new_complaint:documents:collecting"
+    db.commit()
+
+def handle_document_upload(db, wa_id, document_url_or_path):
+    """Handle document upload (image URL or file path)"""
+    from .models import Complaint, ConversationState
+    import json
+    
+    cs = db.query(ConversationState).filter_by(wa_id=wa_id).first()
+    if not cs:
+        send_message(wa_id, "Session expired. Please send 'start' to begin again.")
+        return
+    
+    meta = loads(cs.meta)
+    complaint_id = meta.get("complaint_id")
+    complaint = db.query(Complaint).filter_by(id=complaint_id).first()
+    
+    if not complaint:
+        send_message(wa_id, "Error: Complaint not found. Please send 'start' to begin again.")
+        return
+    
+    # Add document to list
+    documents = json.loads(complaint.documents or "[]")
+    documents.append(document_url_or_path)
+    complaint.documents = json.dumps(documents)
+    db.commit()
+    
+    send_message(wa_id, "Document received. Send more documents or type 'done' to finish:")
+
+def finalize_complaint(db, wa_id):
+    """Finalize and submit the complaint"""
+    from .models import Complaint, ConversationState
+    
+    cs = db.query(ConversationState).filter_by(wa_id=wa_id).first()
+    if not cs:
+        send_message(wa_id, "Session expired. Please send 'start' to begin again.")
+        return
+    
+    meta = loads(cs.meta)
+    complaint_id = meta.get("complaint_id")
+    complaint = db.query(Complaint).filter_by(id=complaint_id).first()
+    
+    if not complaint:
+        send_message(wa_id, "Error: Complaint not found. Please send 'start' to begin again.")
+        return
+    
+    # Generate reference number
+    reference_number = generate_reference_number(complaint.id)
+    complaint.reference_number = reference_number
+    complaint.status = "submitted"
+    db.commit()
+    
+    # Generate PDF report
+    try:
+        from .reports import save_pdf_for_complaint
+        save_pdf_for_complaint(complaint)
+    except Exception as e:
+        print(f"PDF generation error: {e}")
+
+    # Reset conversation state
+    cs.state = "idle"
+    cs.meta = dumps({})
+    db.commit()
+    
+    # Send confirmation
+    send_message(wa_id, f"✅ Complaint submitted successfully!\n\n📋 Reference Number: {reference_number}\n\nOur agent will call or message you shortly to follow up on your complaint.\n\nThank you for using 1930 Cyber Crime Helpline, Odisha.")
+
+def handle_answer(db, wa_id, text, is_image=False, image_url=None):
+    """Main handler for complaint flow answers"""
+    from .models import ConversationState
+    
+    cs = db.query(ConversationState).filter_by(wa_id=wa_id).first()
+    if not cs or not cs.state.startswith("new_complaint"):
         send_message(wa_id, "No active complaint. Send 'start' to open the menu.")
         return
-
-    step = int(cs.state.split(":")[1])
-    # find complaint (latest draft)
-    comp = db.query(Complaint).filter_by(wa_id=wa_id).order_by(Complaint.id.desc()).first()
-    if not comp:
-        send_message(wa_id, "Internal error: no complaint found. Please restart.")
-        cs.state = "idle"; cs.meta = dumps({}); db.commit(); return
-
-    # get flow
-    flow = FLOWS.get(comp.category, FLOWS['other'])
-    meta = loads(cs.meta)
-    meta[f"answer_{step+1}"] = text.strip()
-    cs.meta = dumps(meta)
-    step += 1
-    if step < len(flow):
-        cs.state = f"new_complaint:{step}"
-        db.commit()
-        send_message(wa_id, flow[step])
+    
+    state = cs.state
+    
+    # Handle document uploads
+    if state == "new_complaint:documents:collecting":
+        if text.lower().strip() == "done":
+            finalize_complaint(db, wa_id)
+        elif is_image and image_url:
+            handle_document_upload(db, wa_id, image_url)
+        else:
+            send_message(wa_id, "Please send images/photos or type 'done' to finish:")
         return
-    else:
-        # finish
-        comp.data = dumps(meta)
-        comp.status = "submitted"
-        db.commit()
-
-        # generate & save PDF (calls the new reports module)
-        try:
-            from .reports import save_pdf_for_complaint
-            save_pdf_for_complaint(comp)
-        except Exception as e:
-            # don't break user flow if PDF generation fails
-            print("PDF generation error:", e)
-
-        cs.state = "idle"
-        cs.meta = dumps({})
-        db.commit()
-        send_message(wa_id, f"Thank you — your complaint (ID: {comp.id}) has been submitted. Our team will follow up.")
+    
+    # Handle personal info collection
+    if state.startswith("new_complaint:personal_info:"):
+        handle_personal_info_answer(db, wa_id, text)
+        return
+    
+    # Handle category selection
+    if state == "new_complaint:choose_category":
+        if text.strip() == "1":
+            cs.state = "new_complaint:financial_type"
+            cs.meta = dumps({"complaint_id": loads(cs.meta).get("complaint_id")})
+            db.commit()
+            send_message(wa_id, get_financial_fraud_menu())
+        elif text.strip() == "2":
+            cs.state = "new_complaint:social_platform"
+            cs.meta = dumps({"complaint_id": loads(cs.meta).get("complaint_id")})
+            db.commit()
+            send_message(wa_id, get_social_media_menu())
+        else:
+            send_message(wa_id, "Invalid selection. Please reply with 1 or 2:")
+        return
+    
+    # Handle financial fraud type
+    if state == "new_complaint:financial_type":
+        handle_financial_fraud_type(db, wa_id, text.strip())
+        return
+    
+    # Handle social media platform
+    if state == "new_complaint:social_platform":
+        handle_social_media_platform(db, wa_id, text.strip())
+        return
+    
+    # Handle social media subtype
+    if state == "new_complaint:social_subtype":
+        handle_social_media_subtype(db, wa_id, text.strip())
         return

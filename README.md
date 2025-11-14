@@ -1,38 +1,322 @@
-# 1930 WhatsApp Chatbot Starter (Modular)
+# 1930 Cyber Crime Helpline WhatsApp Chatbot
 
-This project is a hackathon-ready starter that implements a modular FastAPI backend for a WhatsApp chatbot.
-Key features:
-- "start" to open menu (New Complaint, Check Status, Help)
-- Guided complaint flow with categories and multi-step Q&A
-- SQLite backend (no external paid services required)
-- Dry-run mode: if WHATSAPP_TOKEN is not set, bot prints replies instead of sending
-- Lightweight dashboard to view complaints and download PDFs (PDF generation endpoint included)
-- Simulate webhook locally with `simulate_webhook.py`
+A comprehensive WhatsApp chatbot system for the 1930 Cyber Crime Helpline, Odisha. This system allows citizens to report cybercrimes, check complaint status, and request account unfreezing through WhatsApp.
 
-## Quick start (local)
+## 🎯 Problem Statement
 
-1. create virtualenv and install:
-    python -m venv .venv
-    source .venv/bin/activate
-    pip install -r backend/requirements.txt
+The Cyber Crime Helpline 1930 receives a large number of calls daily, leading to long wait times. This WhatsApp chatbot provides an alternative communication channel that:
+- Reduces waiting time for complainants
+- Automatically collects complaint information
+- Generates reference numbers for tracking
+- Provides 24/7 availability
 
-2. create .env in project root and add:
-    VERIFY_TOKEN=cyberbot123
-    WHATSAPP_TOKEN=   # paste token if you have one
-    PHONE_NUMBER_ID=  # paste phone number id if you have one
-    GRAPH_VERSION=v21.0
+## ✨ Features
 
-3. run backend:
-    cd backend
-    uvicorn backend.main:app --reload --port 8000
+### Complete Workflow Implementation
+- **A. New Complaint**: File complaints for Financial Fraud or Social Media Fraud
+- **B. Status Check**: Check status of existing complaints using reference number or mobile number
+- **C. Account Unfreeze**: Request account unfreezing
+- **D. Other Queries**: General query handling
 
-4. (optional) run simulator in parallel window:
-    python3 simulate_webhook.py
+### Financial Fraud Types (23 Types)
+1. Investment/Trading/IPO Fraud
+2. Customer Care Fraud
+3. UPI Fraud
+4. APK Fraud
+5. Fake Franchisee/Dealership Fraud
+6. Online Job Fraud
+7. Debit Card Fraud
+8. Credit Card Fraud
+9. E-Commerce Fraud
+10. Loan App Fraud
+11. Sextortion Fraud
+12. OLX Fraud
+13. Lottery Fraud
+14. Hotel Booking Fraud
+15. Gaming App Fraud
+16. AEPS Fraud
+17. Tower Installation Fraud
+18. E-Wallet Fraud
+19. Digital Arrest Fraud
+20. Fake Website Scam Fraud
+21. Ticket Booking Fraud
+22. Insurance Maturity Fraud
+23. Others
 
-5. (optional) expose via ngrok/cloudflared and set webhook in Meta dashboard:
-    ngrok http 8000
-    Set Callback URL to https://<your-tunnel>/webhook and Verify Token to the value in .env
+### Social Media Fraud Support
+- Facebook, Instagram, X (Twitter), WhatsApp, Telegram, Gmail/YouTube
+- Fraud Call/SMS reporting
+- Platform-specific guidance and links
 
-## Notes
-- This repo intentionally keeps sending logic abstracted in `whatsapp_api.py`.
-- For production use: create long-lived WhatsApp token, secure .env, add auth for dashboard, and harden the server.
+### Data Collection
+- Personal Information (Name, DOB, Phone, Email, Gender, etc.)
+- Address Information (Village, Post Office, Police Station, District, PIN Code)
+- Document/Image Upload Support
+- Data Validation (Phone, Email, PIN Code, Date formats)
+
+### Admin Dashboard
+- View all complaints
+- Filter and search
+- Export to CSV
+- Download PDF reports
+- View detailed complaint information
+
+## 🛠️ Technology Stack
+
+### Backend
+- **FastAPI**: Modern Python web framework
+- **SQLAlchemy**: Database ORM
+- **SQLite**: Lightweight database (no external setup required)
+- **ReportLab**: PDF generation
+- **Uvicorn**: ASGI server
+
+### WhatsApp Integration
+- **WhatsApp Business API** (Meta/Facebook)
+  - Free tier available for development
+  - Easy to get credentials from Meta for Business
+
+### Services Used (All Free)
+1. **WhatsApp Business API** (Meta)
+   - Free for development/testing
+   - Get credentials from: https://developers.facebook.com/
+   - Setup guide: https://developers.facebook.com/docs/whatsapp/cloud-api/get-started
+
+2. **ngrok** (for local testing)
+   - Free tier available
+   - Exposes local server to internet for webhook testing
+   - Download: https://ngrok.com/
+
+3. **SQLite Database**
+   - Built-in, no setup required
+   - File-based database
+
+## 📋 Prerequisites
+
+- Python 3.8 or higher
+- pip (Python package manager)
+- ngrok (for webhook testing)
+- WhatsApp Business API credentials (from Meta)
+
+## 🚀 Setup Instructions
+
+### 1. Clone and Install Dependencies
+
+```bash
+# Navigate to project directory
+cd whatsapp-1930-chatbot-v2
+
+# Create virtual environment (recommended)
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r backend/requirements.txt
+```
+
+### 2. Configure Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+VERIFY_TOKEN=cyberbot123
+WHATSAPP_TOKEN=your_whatsapp_token_here
+PHONE_NUMBER_ID=your_phone_number_id_here
+GRAPH_VERSION=v21.0
+DEBUG_PRINT_REPLY=1
+```
+
+### 3. Get WhatsApp Business API Credentials (Free)
+
+1. Go to https://developers.facebook.com/
+2. Create a Facebook Developer account (free)
+3. Create a new app
+4. Add "WhatsApp" product to your app
+5. Get your:
+   - **WhatsApp Token** (temporary token available immediately)
+   - **Phone Number ID** (provided when you add a test phone number)
+   - **Verify Token** (you can set this to any value, e.g., "cyberbot123")
+
+**Note**: For production, you'll need to go through Meta's verification process, but for development/testing, you can use the free tier.
+
+### 4. Run the Server
+
+```bash
+# From project root
+uvicorn backend.main:app --reload --port 8000
+```
+
+The server will start at `http://localhost:8000`
+
+### 5. Expose Server with ngrok (for Webhook)
+
+In a new terminal:
+
+```bash
+# Install ngrok (if not installed)
+# macOS: brew install ngrok/ngrok/ngrok
+# Or download from https://ngrok.com/
+
+# Start ngrok tunnel
+ngrok http 8000
+```
+
+Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`)
+
+### 6. Configure WhatsApp Webhook
+
+1. Go to your Meta App Dashboard
+2. Navigate to WhatsApp > Configuration
+3. Set Webhook URL: `https://your-ngrok-url.ngrok.io/webhook`
+4. Set Verify Token: `cyberbot123` (or your VERIFY_TOKEN)
+5. Subscribe to `messages` events
+
+### 7. Access Admin Dashboard
+
+Open `dashboard/index.html` in your browser, or serve it via:
+```bash
+# Simple HTTP server
+python -m http.server 8080
+# Then open http://localhost:8080/dashboard/index.html
+```
+
+Or access directly: `file:///path/to/dashboard/index.html`
+
+## 📱 Usage
+
+### For Users (WhatsApp)
+
+1. Send "start" or "hi" to the WhatsApp number
+2. Select an option:
+   - **A**: File a new complaint
+   - **B**: Check status of existing complaint
+   - **C**: Request account unfreeze
+   - **D**: Other queries
+
+3. Follow the prompts to provide information
+4. Upload documents/images when requested
+5. Receive reference number upon submission
+
+### For Admins
+
+1. Open the dashboard
+2. View all complaints
+3. Click "Details" to see full information
+4. Click "PDF" to download complaint report
+5. Use "Export CSV" to export data
+
+## 📁 Project Structure
+
+```
+whatsapp-1930-chatbot-v2/
+├── backend/
+│   ├── main.py                 # FastAPI application
+│   ├── models.py               # Database models
+│   ├── db.py                   # Database configuration
+│   ├── config.py               # Configuration management
+│   ├── message_router.py       # Message routing logic
+│   ├── complaint_flow.py        # New complaint workflow
+│   ├── status_flow.py          # Status check workflow
+│   ├── account_unfreeze_flow.py # Account unfreeze workflow
+│   ├── whatsapp_api.py         # WhatsApp API integration
+│   ├── reports.py              # PDF report generation
+│   ├── utils.py                # Utility functions
+│   └── requirements.txt        # Python dependencies
+├── dashboard/
+│   └── index.html              # Admin dashboard
+├── reports/                    # Generated PDF reports
+├── media/                      # Uploaded documents/images
+├── chatbot.db                  # SQLite database
+├── .env                        # Environment variables (create this)
+└── README.md                   # This file
+```
+
+## 🔒 Security & Privacy
+
+- All data is stored locally in SQLite database
+- WhatsApp messages are processed securely
+- Personal information is validated before storage
+- PDF reports are generated securely
+- No data is shared with third parties
+
+## 🧪 Testing
+
+### Test Webhook Locally
+
+Use the provided `simulate_webhook.py`:
+
+```bash
+python simulate_webhook.py
+```
+
+### Test Endpoints
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Webhook verification
+curl "http://localhost:8000/webhook?hub.mode=subscribe&hub.challenge=test123&hub.verify_token=cyberbot123"
+
+# Get complaints list
+curl http://localhost:8000/_demo/reports
+```
+
+## 📊 Database Schema
+
+### Complaints Table
+- Personal Information: name, father_spouse_guardian_name, date_of_birth, phone_number, email_id, gender
+- Address: village, post_office, police_station, district, pin_code
+- Complaint Details: reference_number, complaint_type, main_category, fraud_type, sub_type, status
+- Documents: documents (JSON array)
+- Timestamps: created_at, updated_at
+
+## 🚨 Troubleshooting
+
+### Server won't start
+- Check if port 8000 is available
+- Verify all dependencies are installed
+- Check Python version (3.8+)
+
+### WhatsApp webhook not working
+- Verify ngrok is running
+- Check webhook URL in Meta dashboard
+- Verify VERIFY_TOKEN matches
+- Check server logs for errors
+
+### Database errors
+- Delete `chatbot.db` to reset database
+- Check file permissions
+- Verify SQLite is working
+
+## 📝 Notes
+
+- **Dry-run mode**: If `WHATSAPP_TOKEN` is not set, the bot will print messages instead of sending (useful for testing)
+- **Reference Numbers**: Generated in format `1930-YYYYMMDD-XXXXX`
+- **PDF Reports**: Automatically generated when complaint is submitted
+- **Image Uploads**: Supported via WhatsApp media messages
+
+## 🔄 Future Enhancements
+
+- [ ] Multi-language support
+- [ ] SMS notifications
+- [ ] Email notifications
+- [ ] Advanced analytics
+- [ ] Automated response system
+- [ ] Integration with government databases
+
+## 📄 License
+
+This project is developed for the 1930 Cyber Crime Helpline, Odisha.
+
+## 👥 Support
+
+For issues or questions:
+- Check the troubleshooting section
+- Review Meta's WhatsApp API documentation
+- Contact the development team
+
+---
+
+**Developed for**: 1930 Cyber Crime Helpline, Odisha  
+**Version**: 2.0  
+**Last Updated**: 2024

@@ -5,8 +5,10 @@ from .config import VERIFY_TOKEN
 from .db import SessionLocal, engine
 from .models import User, Complaint, ConversationState, Base
 from .message_router import route_message
+from .migrations import ensure_schema
 
 Base.metadata.create_all(bind=engine)
+ensure_schema(engine)
 
 app = FastAPI(title="1930 WhatsApp Chatbot (modular)")
 
@@ -20,13 +22,6 @@ def get_db():
 @app.get("/health")
 def health():
     return {"ok": True}
-
-# inside backend/main.py (or wherever your FastAPI app is)
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import PlainTextResponse
-from .config import VERIFY_TOKEN
-
-app = FastAPI()
 
 @app.get("/webhook")
 async def verify_webhook(request: Request):
@@ -58,26 +53,67 @@ async def incoming(request: Request, db=Depends(get_db)):
                 for msg in value.get('messages', []) or []:
                     wa_id = msg.get('from')
                     text = None
-                    if msg.get('type') == 'text':
+                    is_image = False
+                    image_url = None
+                    media_id = None
+                    
+                    msg_type = msg.get('type')
+                    
+                    if msg_type == 'text':
                         text = msg['text'].get('body')
-                    elif msg.get('type') == 'interactive':
+                    elif msg_type == 'image':
+                        is_image = True
+                        image_data = msg.get('image', {})
+                        media_id = image_data.get('id')
+                        # Get media URL from WhatsApp API
+                        if media_id:
+                            from .whatsapp_api import download_media
+                            from .config import WHATSAPP_TOKEN, GRAPH_VERSION
+                            if WHATSAPP_TOKEN:
+                                # Get media URL
+                                media_url = f"https://graph.facebook.com/{GRAPH_VERSION}/{media_id}"
+                                headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}"}
+                                try:
+                                    import requests
+                                    r = requests.get(media_url, headers=headers, timeout=10)
+                                    if r.status_code == 200:
+                                        media_info = r.json()
+                                        image_url = download_media(media_id, media_info.get('url'))
+                                except Exception as e:
+                                    print(f"Error fetching media URL: {e}")
+                                    image_url = f"media_{media_id}"
+                            else:
+                                image_url = f"media_{media_id}"
+                        # Check for caption
+                        caption = image_data.get('caption', '')
+                        if caption:
+                            text = caption
+                    elif msg_type == 'interactive':
                         # handle quick reply or button reply
                         interactive = msg.get('interactive', {})
                         if 'button_reply' in interactive:
                             text = interactive['button_reply'].get('title') or interactive['button_reply'].get('id')
                         elif 'list_reply' in interactive:
                             text = interactive['list_reply'].get('title') or interactive['list_reply'].get('id')
-                    if not wa_id or text is None:
+                    
+                    if not wa_id:
                         continue
+                    
                     # ensure user exists
                     user = db.query(User).filter_by(wa_id=wa_id).first()
                     if not user:
                         user = User(wa_id=wa_id); db.add(user); db.commit(); db.refresh(user)
-                    # route message
-                    route_message(db, wa_id, text)
+                    
+                    # route message (handle both text and images)
+                    if is_image:
+                        route_message(db, wa_id, text or "Image received", is_image=True, image_url=image_url)
+                    elif text:
+                        route_message(db, wa_id, text)
         return JSONResponse({"ok": True})
     except Exception as e:
         print('Error processing incoming webhook:', e)
+        import traceback
+        traceback.print_exc()
         return JSONResponse({"ok": False, "error": str(e)})
 
 # demo endpoint for dashboard
@@ -88,18 +124,27 @@ def list_reports(db=Depends(get_db)):
     for r in db.query(Complaint).order_by(Complaint.created_at.desc()).limit(200):
         out.append({
             "id": r.id,
-            "category": r.category,
+            "reference_number": r.reference_number,
+            "complaint_type": r.complaint_type,
+            "main_category": r.main_category,
+            "fraud_type": r.fraud_type,
+            "sub_type": r.sub_type,
             "status": r.status,
+            "name": r.name,
+            "phone_number": r.phone_number,
+            "email_id": r.email_id,
+            "district": r.district,
             "created_at": r.created_at.isoformat() + "Z",
+            "updated_at": r.updated_at.isoformat() + "Z" if r.updated_at else None,
             "user": {"wa_id": r.wa_id},
-            "data": r.data
+            "data": r.data,
+            "documents": r.documents
         })
     return JSONResponse(jsonable_encoder(out))
 
 
 
 from fastapi.responses import FileResponse
-import os
 
 @app.get("/reports/{report_id}.pdf")
 def get_report_pdf(report_id: int):
