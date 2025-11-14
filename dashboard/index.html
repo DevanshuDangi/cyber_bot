@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>1930 Chatbot Dashboard (Demo)</title>
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;background:#f4f6fb;color:#0b1220;padding:20px}
+      .card{background:white;padding:12px;border-radius:8px;box-shadow:0 6px 18px rgba(16,24,40,0.08);margin-bottom:12px}
+      table{width:100%;border-collapse:collapse}
+      th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+    </style>
+  </head>
+  <body>
+    <h1>1930 Chatbot Dashboard (Demo)</h1>
+    <div class="card">
+      <label>API base: <input id="api" value="http://localhost:8000" style="width:300px"/></label>
+      <button onclick="load()">Load</button>
+    </div>
+    <div id="reports"></div>
+    <script>
+      async function load(){
+        const api = document.getElementById('api').value;
+        const r = await fetch(api + '/_demo/reports');
+        const data = await r.json();
+        const node = document.getElementById('reports');
+        node.innerHTML = '<div class="card"><table><tr><th>ID</th><th>WA ID</th><th>Category</th><th>Status</th><th>PDF</th></tr>' +
+          data.map(d => `<tr><td>${d.id}</td><td>${d.user.wa_id}</td><td>${d.category}</td><td>${d.status}</td><td><a href="${api}/reports/${d.id}.pdf" target="_blank">PDF</a></td></tr>`).join('') +
+          '</table></div>';
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+services:
+  api:
+    build: .
+    container_name: chatbot_api
+    environment:
+      - VERIFY_TOKEN=${VERIFY_TOKEN:-cyberbot123}
+      - WHATSAPP_TOKEN=${WHATSAPP_TOKEN:-}
+      - PHONE_NUMBER_ID=${PHONE_NUMBER_ID:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend
+      - ./reports:/app/reports
+  dashboard:
+    image: nginx:alpine
+    container_name: chatbot_dashboard
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+    ports:
+      - "8080:80"
